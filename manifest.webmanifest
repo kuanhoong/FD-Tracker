@@ -1,0 +1,23 @@
+{
+  "name": "FD Tracker",
+  "short_name": "FD Tracker",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#f4efe6",
+  "theme_color": "#16423c",
+  "description": "Track fixed deposits across banks, rates, and maturity dates.",
+  "icons": [
+    {
+      "src": "icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#003461">
+  <title>FD Tracker</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Manrope:wght@600;700;800&display=swap" rel="stylesheet">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="page-shell">
+    <header class="topbar">
+      <div class="brand-group">
+        <div class="brand-avatar">FD</div>
+        <div>
+          <p class="brand-kicker">Editorial Finance</p>
+          <h1>FD Tracker</h1>
+        </div>
+      </div>
+      <div class="header-actions">
+        <button id="themeToggleBtn" class="icon-button" type="button" aria-label="Turn on dark mode">
+          <span class="icon-theme"></span>
+        </button>
+        <button id="enableNotificationsBtn" class="icon-button" type="button" aria-label="Enable reminders">
+          <span class="icon-bell"></span>
+        </button>
+      </div>
+    </header>
+
+    <main class="main-layout">
+      <section class="hero-grid">
+        <article class="portfolio-hero tone-card">
+          <div class="hero-copy-block">
+            <p class="section-kicker">Total Investment Portfolio</p>
+            <h2 id="portfolioTotal" class="hero-value">MYR 0.00</h2>
+            <p id="portfolioGrowth" class="hero-trend">No deposits tracked yet.</p>
+          </div>
+          <div class="hero-chart" aria-hidden="true">
+            <span></span>
+            <span></span>
+            <span></span>
+            <span></span>
+          </div>
+        </article>
+
+        <article class="return-card tone-card-soft">
+          <p class="section-kicker">Estimated Return</p>
+          <h3 id="estimatedReturn" class="supporting-value">MYR 0.00</h3>
+          <p class="supporting-copy">Projected interest across all active fixed deposits.</p>
+          <div class="progress-meta">
+            <span>Current Progress</span>
+            <span id="progressPercent">0%</span>
+          </div>
+          <div class="progress-track">
+            <div id="progressFill" class="progress-fill"></div>
+          </div>
+        </article>
+      </section>
+
+      <section class="action-row">
+        <a class="primary-cta" href="#addDepositSection">Add New Fixed Deposit</a>
+        <button class="secondary-cta" type="button" id="scrollInvestmentsBtn">View Investments</button>
+        <p id="notificationStatus" class="notification-copy">Popup reminders are disabled. Click the bell to enable 7-day maturity alerts.</p>
+      </section>
+
+      <section class="content-grid">
+        <div class="left-column">
+          <section id="calendarSection" class="content-section">
+            <div class="section-heading">
+              <div>
+                <p class="section-kicker">Liquidity Outlook</p>
+                <h2>Maturity Timeline</h2>
+              </div>
+              <span class="section-meta">Next 6, 12, 18 months</span>
+            </div>
+            <div id="projectionCards" class="timeline-list"></div>
+          </section>
+
+          <section class="content-section tone-card-deep">
+            <p class="section-kicker section-kicker-inverse">Risk Profile</p>
+            <h2 id="riskProfileTitle" class="inverse-heading">Conservative Fixed-Income View</h2>
+            <p id="riskProfileCopy" class="inverse-copy">
+              Your maturity window is organized to help you spot reinvestment timing, upcoming liquidity, and near-term reminders without digging through individual placements.
+            </p>
+          </section>
+        </div>
+
+        <aside class="right-column">
+          <section class="content-section">
+            <div class="section-heading">
+              <div>
+                <p class="section-kicker">Upcoming Schedule</p>
+                <h2>Maturity Alerts</h2>
+              </div>
+              <span class="section-meta">1 week warning</span>
+            </div>
+            <div id="reminderList" class="reminder-stack"></div>
+          </section>
+
+          <section id="addDepositSection" class="content-section tone-card-soft">
+            <div class="section-heading">
+              <div>
+                <p class="section-kicker">New Entry</p>
+                <h2>Add Fixed Deposit</h2>
+              </div>
+            </div>
+
+            <form id="fdForm" class="editorial-form">
+              <label class="field">
+                <span>Bank name</span>
+                <select id="bankName" name="bankName" required>
+                  <option value="">Select a bank</option>
+                  <option>Maybank</option>
+                  <option>CIMB</option>
+                  <option>Public Bank</option>
+                  <option>RHB Bank</option>
+                  <option>Hong Leong Bank</option>
+                  <option>Alliance Bank</option>
+                  <option>AmBank</option>
+                  <option>Affin Bank</option>
+                  <option>UOB Bank</option>
+                  <option>HSBC Bank</option>
+                  <option>Bank Islam</option>
+                  <option>Bank Muamalat</option>
+                  <option>GXBank</option>
+                  <option>Boost Bank</option>
+                  <option>AEON Bank</option>
+                </select>
+              </label>
+
+              <label class="field">
+                <span>Deposit name</span>
+                <input id="depositName" name="depositName" type="text" placeholder="Promo FD Apr 2026" required>
+              </label>
+
+              <div class="field-row">
+                <label class="field tone-field">
+                  <span>Investment amount</span>
+                  <input id="principal" name="principal" type="number" min="0" step="0.01" placeholder="10000" required>
+                </label>
+
+                <label class="field tone-field">
+                  <span>Interest rate (%)</span>
+                  <input id="rate" name="rate" type="number" min="0" step="0.01" placeholder="3.80" required>
+                </label>
+              </div>
+
+              <div class="field-row">
+                <label class="field">
+                  <span>Start date</span>
+                  <input id="startDate" name="startDate" type="date" required>
+                </label>
+
+                <label class="field">
+                  <span>Tenure</span>
+                  <select id="tenureMonths" name="tenureMonths" required>
+                    <option value="">Select tenure</option>
+                    <option value="3">3 months</option>
+                    <option value="6">6 months</option>
+                    <option value="9">9 months</option>
+                    <option value="12">12 months</option>
+                    <option value="18">18 months</option>
+                    <option value="24">24 months</option>
+                    <option value="36">36 months</option>
+                  </select>
+                </label>
+              </div>
+
+              <div class="field-row">
+                <div class="field tone-field">
+                  <span>Calculated maturity date</span>
+                  <output id="calculatedMaturityDate" class="calc-output">Select start date and tenure</output>
+                </div>
+
+                <div class="field tone-field">
+                  <span>Total return interest</span>
+                  <output id="calculatedInterest" class="calc-output">MYR 0.00</output>
+                </div>
+              </div>
+
+              <div class="field">
+                <span>Total amount at maturity</span>
+                <output id="calculatedMaturityValue" class="calc-output">MYR 0.00</output>
+              </div>
+
+              <label class="field">
+                <span>Notes</span>
+                <textarea id="notes" name="notes" rows="3" placeholder="Optional notes"></textarea>
+              </label>
+
+              <div class="notification-tile">
+                <div>
+                  <h3>Enable Notifications</h3>
+                  <p>Receive a browser reminder when a deposit is within 7 days of maturity.</p>
+                </div>
+                <button class="toggle-pill" type="button" id="formEnableNotificationsBtn">Turn On</button>
+              </div>
+
+              <button class="save-button" type="submit">Save Investment</button>
+            </form>
+          </section>
+        </aside>
+      </section>
+
+      <section id="investmentsSection" class="content-section investments-section">
+        <div class="section-heading">
+          <div>
+            <p class="section-kicker">Architectural Ledger</p>
+            <h2>All Fixed Deposits</h2>
+          </div>
+          <span id="investmentCount" class="section-meta">0 entries</span>
+        </div>
+
+        <div id="summaryCards" class="summary-ribbon"></div>
+        <div id="depositTableBody" class="investment-list"></div>
+      </section>
+    </main>
+
+    <nav class="bottom-nav" aria-label="Primary">
+      <a class="nav-item is-active" href="#">
+        <span class="nav-icon"></span>
+        <span>Dashboard</span>
+      </a>
+      <a class="nav-item" href="#investmentsSection">
+        <span class="nav-icon nav-icon-list"></span>
+        <span>Investments</span>
+      </a>
+      <a class="nav-item" href="#addDepositSection">
+        <span class="nav-icon nav-icon-add"></span>
+        <span>Add New</span>
+      </a>
+      <a class="nav-item" href="#calendarSection">
+        <span class="nav-icon nav-icon-calendar"></span>
+        <span>Calendar</span>
+      </a>
+    </nav>
+  </div>
+
+  <template id="emptyStateTemplate">
+    <div class="empty-state">
+      <p>No fixed deposits yet. Add your first placement to unlock maturity forecasts, expected returns, and reminder tracking.</p>
+    </div>
+  </template>
+
+  <script src="app.js"></script>
+</body>
+</html>
