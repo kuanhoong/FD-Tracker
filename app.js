@@ -37,6 +37,14 @@ const appState = {
   storageMode: "local",
 };
 const appConfig = window.FDTrackerConfig || { supabaseUrl: "", supabaseAnonKey: "" };
+const supabaseClient = (hasSupabaseConfig => {
+  if (!hasSupabaseConfig) return null;
+  try {
+    return window.supabase.createClient(appConfig.supabaseUrl, appConfig.supabaseAnonKey);
+  } catch {
+    return null;
+  }
+})(Boolean(window.FDTrackerConfig?.supabaseUrl && window.FDTrackerConfig?.supabaseAnonKey));
 
 const currencyFormatter = new Intl.NumberFormat(undefined, {
   style: "currency",
@@ -48,6 +56,34 @@ const percentFormatter = new Intl.NumberFormat(undefined, {
   minimumFractionDigits: 2,
   maximumFractionDigits: 2,
 });
+
+function toDbRow(deposit) {
+  return {
+    id: deposit.id,
+    bank_name: deposit.bankName,
+    deposit_name: deposit.depositName,
+    principal: deposit.principal,
+    rate: deposit.rate,
+    start_date: deposit.startDate,
+    tenure_months: deposit.tenureMonths,
+    maturity_date: deposit.maturityDate,
+    notes: deposit.notes || "",
+  };
+}
+
+function fromDbRow(row) {
+  return {
+    id: row.id,
+    bankName: row.bank_name,
+    depositName: row.deposit_name,
+    principal: row.principal,
+    rate: row.rate,
+    startDate: row.start_date,
+    tenureMonths: row.tenure_months,
+    maturityDate: row.maturity_date,
+    notes: row.notes || "",
+  };
+}
 
 function pluralize(value, singular, plural = `${singular}s`) {
   return `${value} ${Math.abs(value) === 1 ? singular : plural}`;
@@ -184,7 +220,18 @@ function hasSupabaseConfig() {
 }
 
 async function hydrateDeposits() {
-  appState.storageMode = hasSupabaseConfig() ? "supabase-ready" : "local";
+  if (supabaseClient) {
+    const { data, error } = await supabaseClient
+      .from("deposits")
+      .select("*")
+      .order("created_at", { ascending: true });
+    if (!error && data) {
+      appState.deposits = data.map(fromDbRow);
+      appState.storageMode = "supabase";
+      return;
+    }
+  }
+  appState.storageMode = "local";
   appState.deposits = loadDeposits();
 }
 
@@ -216,8 +263,8 @@ function calculateFormPreview() {
 }
 
 function updateStorageStatus() {
-  if (appState.storageMode === "supabase-ready") {
-    storageStatus.textContent = "Storage mode: Supabase config detected, integration setup pending";
+  if (appState.storageMode === "supabase") {
+    storageStatus.textContent = "Storage mode: Supabase (cloud sync active)";
     return;
   }
 
@@ -542,8 +589,13 @@ fdForm.addEventListener("submit", async (event) => {
   }
 
   try {
+    if (supabaseClient) {
+      const { error } = await supabaseClient.from("deposits").insert(toDbRow(newDeposit));
+      if (error) throw new Error(error.message);
+    } else {
+      saveDeposits([...appState.deposits, newDeposit]);
+    }
     appState.deposits = [...appState.deposits, newDeposit];
-    saveDeposits(appState.deposits);
     fdForm.reset();
     calculateFormPreview();
     renderDashboard();
@@ -564,8 +616,13 @@ depositTableBody.addEventListener("click", async (event) => {
   }
 
   try {
+    if (supabaseClient) {
+      const { error } = await supabaseClient.from("deposits").delete().eq("id", deleteId);
+      if (error) throw new Error(error.message);
+    } else {
+      saveDeposits(appState.deposits.filter((deposit) => deposit.id !== deleteId));
+    }
     appState.deposits = appState.deposits.filter((deposit) => deposit.id !== deleteId);
-    saveDeposits(appState.deposits);
     renderDashboard();
   } catch (error) {
     window.alert(error.message || "Unable to delete the deposit right now.");
