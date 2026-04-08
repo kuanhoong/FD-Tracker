@@ -1,6 +1,7 @@
 .env
 .env.*
 !.env.example
+.netlify
 
 Thumbs.db
 .DS_Store

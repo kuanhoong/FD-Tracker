@@ -1,8 +1,5 @@
 const STORAGE_KEY = "fd-tracker.deposits";
 const NOTIFIED_KEY = "fd-tracker.notified-reminders";
-const STORAGE_MODE_KEY = "fd-tracker.storage-mode";
-const MIGRATION_KEY = "fd-tracker.api-migrated";
-const API_BASE = "/api/deposits";
 
 const fdForm = document.getElementById("fdForm");
 const bankNameInput = document.getElementById("bankName");
@@ -39,6 +36,7 @@ const appState = {
   deposits: [],
   storageMode: "local",
 };
+const appConfig = window.FDTrackerConfig || { supabaseUrl: "", supabaseAnonKey: "" };
 
 const currencyFormatter = new Intl.NumberFormat(undefined, {
   style: "currency",
@@ -65,22 +63,6 @@ function loadDeposits() {
 
 function saveDeposits(deposits) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(deposits));
-}
-
-function loadStorageMode() {
-  return localStorage.getItem(STORAGE_MODE_KEY) || "local";
-}
-
-function saveStorageMode(mode) {
-  localStorage.setItem(STORAGE_MODE_KEY, mode);
-}
-
-function hasMigratedToApi() {
-  return localStorage.getItem(MIGRATION_KEY) === "true";
-}
-
-function markMigratedToApi() {
-  localStorage.setItem(MIGRATION_KEY, "true");
 }
 
 function loadNotifiedReminders() {
@@ -197,75 +179,13 @@ function getEnrichedDeposits() {
     .sort((a, b) => toDate(a.maturityDate) - toDate(b.maturityDate));
 }
 
-async function fetchApi(path = "", options = {}) {
-  const response = await fetch(`${API_BASE}${path}`, {
-    headers: {
-      "content-type": "application/json",
-      ...(options.headers || {}),
-    },
-    ...options,
-  });
-
-  if (!response.ok) {
-    let message = `Request failed with status ${response.status}`;
-    try {
-      const payload = await response.json();
-      if (payload?.error) {
-        message = payload.error;
-      }
-    } catch {
-      // Keep the generic fallback message when JSON is unavailable.
-    }
-    throw new Error(message);
-  }
-
-  return response.status === 204 ? null : response.json();
-}
-
-async function loadDepositsFromApi() {
-  const payload = await fetchApi();
-  return payload?.deposits || [];
-}
-
-async function saveDepositToApi(deposit) {
-  await fetchApi("", {
-    method: "POST",
-    body: JSON.stringify(deposit),
-  });
-}
-
-async function deleteDepositFromApi(id) {
-  await fetchApi(`/${encodeURIComponent(id)}`, {
-    method: "DELETE",
-  });
+function hasSupabaseConfig() {
+  return Boolean(appConfig.supabaseUrl && appConfig.supabaseAnonKey);
 }
 
 async function hydrateDeposits() {
-  const localDeposits = loadDeposits();
-
-  try {
-    const remoteDeposits = await loadDepositsFromApi();
-    appState.storageMode = "remote";
-    saveStorageMode("remote");
-
-    if (!remoteDeposits.length && localDeposits.length && !hasMigratedToApi()) {
-      for (const deposit of localDeposits) {
-        await saveDepositToApi(deposit);
-      }
-      markMigratedToApi();
-      const migratedDeposits = await loadDepositsFromApi();
-      appState.deposits = migratedDeposits;
-      saveDeposits(migratedDeposits);
-      return;
-    }
-
-    appState.deposits = remoteDeposits;
-    saveDeposits(remoteDeposits);
-  } catch {
-    appState.storageMode = "local";
-    saveStorageMode("local");
-    appState.deposits = localDeposits;
-  }
+  appState.storageMode = hasSupabaseConfig() ? "supabase-ready" : "local";
+  appState.deposits = loadDeposits();
 }
 
 function calculateFormPreview() {
@@ -296,9 +216,12 @@ function calculateFormPreview() {
 }
 
 function updateStorageStatus() {
-  storageStatus.textContent = appState.storageMode === "remote"
-    ? "Storage mode: Cloudflare D1 sync is active"
-    : "Storage mode: browser-only fallback";
+  if (appState.storageMode === "supabase-ready") {
+    storageStatus.textContent = "Storage mode: Supabase config detected, integration setup pending";
+    return;
+  }
+
+  storageStatus.textContent = "Storage mode: browser-only storage";
 }
 
 function renderRiskProfile(deposits) {
@@ -619,13 +542,7 @@ fdForm.addEventListener("submit", async (event) => {
   }
 
   try {
-    if (appState.storageMode === "remote") {
-      await saveDepositToApi(newDeposit);
-      appState.deposits = [...appState.deposits, newDeposit];
-    } else {
-      appState.deposits = [...appState.deposits, newDeposit];
-    }
-
+    appState.deposits = [...appState.deposits, newDeposit];
     saveDeposits(appState.deposits);
     fdForm.reset();
     calculateFormPreview();
@@ -647,10 +564,6 @@ depositTableBody.addEventListener("click", async (event) => {
   }
 
   try {
-    if (appState.storageMode === "remote") {
-      await deleteDepositFromApi(deleteId);
-    }
-
     appState.deposits = appState.deposits.filter((deposit) => deposit.id !== deleteId);
     saveDeposits(appState.deposits);
     renderDashboard();

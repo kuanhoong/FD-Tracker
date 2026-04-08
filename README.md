@@ -2,146 +2,71 @@
 
 Fixed Deposit tracker for browser and mobile, built as a static web app.
 
-## Cloudflare Pages Deployment
+## Current State
 
-This project can be deployed directly to Cloudflare Pages as a static site.
+The app currently stores data in browser local storage.
 
-### Option 1: GitHub + Cloudflare Pages
+This repo is now prepared for:
 
-Recommended if you want automatic redeploys whenever you push changes.
+- Netlify hosting
+- future Supabase integration
 
-1. Push this folder to a GitHub repository.
-2. Log in to Cloudflare and go to `Workers & Pages`.
-3. Select `Create application`.
-4. Choose `Pages` and connect your GitHub repository.
-5. Use these settings:
+It no longer depends on the Cloudflare D1 deployment path.
 
-   - Production branch: `main`
-   - Framework preset: `None`
-   - Build command: leave blank, or use `exit 0`
-   - Build output directory: `.`
+## Netlify Deployment
 
-6. Deploy the project.
-7. Cloudflare will give you a `*.pages.dev` URL.
+This project can be deployed to Netlify as a static site.
 
-### Option 2: Direct Upload
+### Recommended Netlify Settings
 
-Useful if you want to upload the project without GitHub.
+- Build command: `echo 'Static site - no build step required'`
+- Publish directory: `.`
 
-1. Log in to Cloudflare and go to `Workers & Pages`.
-2. Select `Create application`.
-3. Choose `Pages`.
-4. Choose `Direct Upload` or `Drag and drop your files`.
-5. Upload this project folder as the site contents.
-6. Set the project name and deploy.
+These settings are already defined in [netlify.toml](c:/Users/kuanh/Downloads/FD-Tracker/netlify.toml).
 
-Important: Direct Upload projects cannot later be switched to Git integration. If you want automatic deployments later, create a new Pages project connected to Git.
+### Deploy From GitHub
 
-## Cloud Persistence With Cloudflare D1
+1. Log in to Netlify
+2. Select `Add new site`
+3. Choose `Import an existing project`
+4. Connect your GitHub repository
+5. Select this repo
+6. Confirm the build settings from `netlify.toml`
+7. Deploy
 
-This repo now includes:
+## Supabase Preparation
 
-- Pages Functions API routes under `functions/api/deposits/`
-- D1 schema in `db/schema.sql`
-- frontend API-first loading with browser fallback
+This repo includes a lightweight frontend config scaffold for Supabase:
 
-To enable permanent cloud storage, connect the Pages project to Git and bind a D1 database.
+- [supabase-config.js](c:/Users/kuanh/Downloads/FD-Tracker/supabase-config.js)
+- [supabase-config.example.js](c:/Users/kuanh/Downloads/FD-Tracker/supabase-config.example.js)
 
-### 1. Use a Git-connected Pages project
+Right now the app does not yet save to Supabase. It is only prepared for that next step.
 
-Cloudflare Pages Functions require Git integration or Wrangler-based deployment.
+### What is already prepared
 
-If your current site was created with Direct Upload, create a new Pages project from this GitHub repo instead of extending the Direct Upload project.
+- a dedicated Supabase config file loaded before the app
+- app storage status messaging that can detect whether Supabase config values are present
+- removal of Cloudflare-specific runtime assumptions
 
-### 2. Create a D1 database
+### Next implementation step
 
-In Cloudflare dashboard:
+The next phase is to:
 
-1. Go to `Workers & Pages` -> `D1 SQL Database`
-2. Create a database, for example: `fd-tracker-db`
-3. Copy the database ID
+1. create a Supabase project
+2. create a `deposits` table
+3. add authentication
+4. replace browser-only storage with Supabase reads and writes
 
-### 3. Add the D1 binding to Pages
+## Privacy Note
 
-In your Pages project:
+Until Supabase auth is added, the app should still be treated as a local-only tracker.
 
-1. Open `Settings`
-2. Open `Bindings`
-3. Add a `D1 database` binding
-4. Use binding name: `DB`
-5. Select your `fd-tracker-db` database
+If you deploy it publicly on Netlify today:
 
-The API routes in this repo expect the binding name to be exactly `DB`.
-
-### 4. Apply the schema
-
-Run this with Wrangler after logging in:
-
-```powershell
-npx wrangler d1 execute fd-tracker-db --file=./db/schema.sql
-```
-
-If Wrangler asks for authentication, complete the Cloudflare login flow first:
-
-```powershell
-npx wrangler login
-```
-
-### 5. Redeploy the Pages project
-
-After the binding and schema are ready, redeploy the Pages project from Git.
-
-Once deployed:
-
-- `GET /api/deposits` will load saved deposits from D1
-- `POST /api/deposits` will save deposits to D1
-- `DELETE /api/deposits/:id` will remove deposits from D1
-
-### 6. Local data migration behavior
-
-If the app finds local browser deposits and the remote D1 database is empty, it will automatically try to copy the browser data into D1 on first successful API load.
-
-### 7. Privacy warning
-
-This implementation does not yet include authentication.
-
-Before storing real FD data in D1, you should protect the site with:
-
-- Cloudflare Access, or
-- another authentication layer
-
-Without protection, anyone who can reach the site URL could potentially access the shared backend data.
-
-## Custom Domain
-
-After deployment:
-
-1. Open your Pages project.
-2. Go to `Custom domains`.
-3. Select `Set up a domain`.
-4. Add your domain or subdomain.
-
-Notes:
-
-- If you want to use an apex domain like `example.com`, the domain should be on Cloudflare nameservers.
-- If you want to use a subdomain like `fd.example.com`, you can point a CNAME to your `*.pages.dev` domain.
-
-## Recommended Settings For This Project
-
-- Build output directory: `.`
-- No Node build step required
-- HTTPS is handled by Cloudflare
-- Works on desktop and mobile browsers
-- D1 binding name: `DB`
-
-## Notification Reminder Limitation
-
-This app uses browser notification permission. That means:
-
-- In-app reminders always appear in the dashboard
-- Popup reminders only work if the user enables notifications
-- Notifications are best when the app is open or installed as a home screen app
-- This is not yet a full backend push-notification system
+- the site is public
+- your FD entries are still only stored in your browser local storage
+- other devices will not automatically share that data yet
 
 ## Local Preview
 
@@ -157,12 +82,17 @@ Then open:
 http://127.0.0.1:4173/
 ```
 
-## Cloudflare References
+## Files Added For Netlify / Supabase Direction
 
-- Cloudflare Pages Static HTML: https://developers.cloudflare.com/pages/framework-guides/deploy-anything/
-- Cloudflare Build Configuration: https://developers.cloudflare.com/pages/configuration/build-configuration/
-- Cloudflare Direct Upload: https://developers.cloudflare.com/pages/get-started/direct-upload/
-- Cloudflare Custom Domains: https://developers.cloudflare.com/pages/configuration/custom-domains/
-- Cloudflare Pages Functions: https://developers.cloudflare.com/pages/functions/
-- Cloudflare Pages Bindings: https://developers.cloudflare.com/pages/functions/bindings/
-- Cloudflare D1 Get Started: https://developers.cloudflare.com/d1/get-started/
+- [netlify.toml](c:/Users/kuanh/Downloads/FD-Tracker/netlify.toml)
+- [supabase-config.js](c:/Users/kuanh/Downloads/FD-Tracker/supabase-config.js)
+- [supabase-config.example.js](c:/Users/kuanh/Downloads/FD-Tracker/supabase-config.example.js)
+
+## Next Recommended Step
+
+If you want permanent private storage, the next best step is:
+
+- Netlify for hosting
+- Supabase for database + auth
+
+Then we can make the app available on both desktop and mobile with the same signed-in data.
