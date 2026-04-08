@@ -1,5 +1,8 @@
 const STORAGE_KEY = "fd-tracker.deposits";
 const NOTIFIED_KEY = "fd-tracker.notified-reminders";
+const STORAGE_MODE_KEY = "fd-tracker.storage-mode";
+const MIGRATION_KEY = "fd-tracker.api-migrated";
+const API_BASE = "/api/deposits";
 
 const fdForm = document.getElementById("fdForm");
 const bankNameInput = document.getElementById("bankName");
@@ -17,6 +20,7 @@ const emptyStateTemplate = document.getElementById("emptyStateTemplate");
 const themeToggleBtn = document.getElementById("themeToggleBtn");
 const enableNotificationsBtn = document.getElementById("enableNotificationsBtn");
 const formEnableNotificationsBtn = document.getElementById("formEnableNotificationsBtn");
+const storageStatus = document.getElementById("storageStatus");
 const notificationStatus = document.getElementById("notificationStatus");
 const portfolioTotal = document.getElementById("portfolioTotal");
 const portfolioGrowth = document.getElementById("portfolioGrowth");
@@ -31,6 +35,10 @@ const calculatedMaturityValue = document.getElementById("calculatedMaturityValue
 const riskProfileTitle = document.getElementById("riskProfileTitle");
 const riskProfileCopy = document.getElementById("riskProfileCopy");
 const THEME_KEY = "fd-tracker.theme";
+const appState = {
+  deposits: [],
+  storageMode: "local",
+};
 
 const currencyFormatter = new Intl.NumberFormat(undefined, {
   style: "currency",
@@ -57,6 +65,22 @@ function loadDeposits() {
 
 function saveDeposits(deposits) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(deposits));
+}
+
+function loadStorageMode() {
+  return localStorage.getItem(STORAGE_MODE_KEY) || "local";
+}
+
+function saveStorageMode(mode) {
+  localStorage.setItem(STORAGE_MODE_KEY, mode);
+}
+
+function hasMigratedToApi() {
+  return localStorage.getItem(MIGRATION_KEY) === "true";
+}
+
+function markMigratedToApi() {
+  localStorage.setItem(MIGRATION_KEY, "true");
 }
 
 function loadNotifiedReminders() {
@@ -161,7 +185,7 @@ function getMaturityDateForDeposit(deposit) {
 
 function getEnrichedDeposits() {
   const today = startOfToday();
-  return loadDeposits()
+  return appState.deposits
     .map((deposit) => ({
       ...deposit,
       tenureMonths: deposit.tenureMonths ?? "",
@@ -171,6 +195,77 @@ function getEnrichedDeposits() {
       daysUntilMaturity: daysBetween(today, getMaturityDateForDeposit(deposit)),
     }))
     .sort((a, b) => toDate(a.maturityDate) - toDate(b.maturityDate));
+}
+
+async function fetchApi(path = "", options = {}) {
+  const response = await fetch(`${API_BASE}${path}`, {
+    headers: {
+      "content-type": "application/json",
+      ...(options.headers || {}),
+    },
+    ...options,
+  });
+
+  if (!response.ok) {
+    let message = `Request failed with status ${response.status}`;
+    try {
+      const payload = await response.json();
+      if (payload?.error) {
+        message = payload.error;
+      }
+    } catch {
+      // Keep the generic fallback message when JSON is unavailable.
+    }
+    throw new Error(message);
+  }
+
+  return response.status === 204 ? null : response.json();
+}
+
+async function loadDepositsFromApi() {
+  const payload = await fetchApi();
+  return payload?.deposits || [];
+}
+
+async function saveDepositToApi(deposit) {
+  await fetchApi("", {
+    method: "POST",
+    body: JSON.stringify(deposit),
+  });
+}
+
+async function deleteDepositFromApi(id) {
+  await fetchApi(`/${encodeURIComponent(id)}`, {
+    method: "DELETE",
+  });
+}
+
+async function hydrateDeposits() {
+  const localDeposits = loadDeposits();
+
+  try {
+    const remoteDeposits = await loadDepositsFromApi();
+    appState.storageMode = "remote";
+    saveStorageMode("remote");
+
+    if (!remoteDeposits.length && localDeposits.length && !hasMigratedToApi()) {
+      for (const deposit of localDeposits) {
+        await saveDepositToApi(deposit);
+      }
+      markMigratedToApi();
+      const migratedDeposits = await loadDepositsFromApi();
+      appState.deposits = migratedDeposits;
+      saveDeposits(migratedDeposits);
+      return;
+    }
+
+    appState.deposits = remoteDeposits;
+    saveDeposits(remoteDeposits);
+  } catch {
+    appState.storageMode = "local";
+    saveStorageMode("local");
+    appState.deposits = localDeposits;
+  }
 }
 
 function calculateFormPreview() {
@@ -198,6 +293,12 @@ function calculateFormPreview() {
   calculatedMaturityDate.textContent = formatDateFromDate(maturityDate);
   calculatedInterest.textContent = formatCurrency(expectedInterest);
   calculatedMaturityValue.textContent = formatCurrency(principal + expectedInterest);
+}
+
+function updateStorageStatus() {
+  storageStatus.textContent = appState.storageMode === "remote"
+    ? "Storage mode: Cloudflare D1 sync is active"
+    : "Storage mode: browser-only fallback";
 }
 
 function renderRiskProfile(deposits) {
@@ -481,6 +582,7 @@ function updateNotificationStatus() {
 
 function renderDashboard() {
   const deposits = getEnrichedDeposits();
+  updateStorageStatus();
   renderSummaryCards(deposits);
   renderProjectionCards(deposits);
   renderReminders(deposits);
@@ -490,7 +592,7 @@ function renderDashboard() {
   notifyDueDeposits(deposits);
 }
 
-fdForm.addEventListener("submit", (event) => {
+fdForm.addEventListener("submit", async (event) => {
   event.preventDefault();
 
   const startDateValue = startDateInput.value;
@@ -516,15 +618,24 @@ fdForm.addEventListener("submit", (event) => {
     return;
   }
 
-  const deposits = loadDeposits();
-  deposits.push(newDeposit);
-  saveDeposits(deposits);
-  fdForm.reset();
-  calculateFormPreview();
-  renderDashboard();
+  try {
+    if (appState.storageMode === "remote") {
+      await saveDepositToApi(newDeposit);
+      appState.deposits = [...appState.deposits, newDeposit];
+    } else {
+      appState.deposits = [...appState.deposits, newDeposit];
+    }
+
+    saveDeposits(appState.deposits);
+    fdForm.reset();
+    calculateFormPreview();
+    renderDashboard();
+  } catch (error) {
+    window.alert(error.message || "Unable to save the deposit right now.");
+  }
 });
 
-depositTableBody.addEventListener("click", (event) => {
+depositTableBody.addEventListener("click", async (event) => {
   const target = event.target;
   if (!(target instanceof HTMLElement)) {
     return;
@@ -535,9 +646,17 @@ depositTableBody.addEventListener("click", (event) => {
     return;
   }
 
-  const deposits = loadDeposits().filter((deposit) => deposit.id !== deleteId);
-  saveDeposits(deposits);
-  renderDashboard();
+  try {
+    if (appState.storageMode === "remote") {
+      await deleteDepositFromApi(deleteId);
+    }
+
+    appState.deposits = appState.deposits.filter((deposit) => deposit.id !== deleteId);
+    saveDeposits(appState.deposits);
+    renderDashboard();
+  } catch (error) {
+    window.alert(error.message || "Unable to delete the deposit right now.");
+  }
 });
 
 enableNotificationsBtn.addEventListener("click", async () => {
@@ -577,6 +696,11 @@ if ("serviceWorker" in navigator) {
   });
 }
 
-applyTheme(loadTheme());
-renderDashboard();
-calculateFormPreview();
+async function initializeApp() {
+  applyTheme(loadTheme());
+  await hydrateDeposits();
+  renderDashboard();
+  calculateFormPreview();
+}
+
+initializeApp();
