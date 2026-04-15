@@ -27,6 +27,7 @@ const progressPercent = document.getElementById("progressPercent");
 const progressFill = document.getElementById("progressFill");
 const investmentCount = document.getElementById("investmentCount");
 const scrollInvestmentsBtn = document.getElementById("scrollInvestmentsBtn");
+const downloadDataBtn = document.getElementById("downloadDataBtn");
 const calculatedMaturityDate = document.getElementById("calculatedMaturityDate");
 const calculatedInterest = document.getElementById("calculatedInterest");
 const calculatedMaturityValue = document.getElementById("calculatedMaturityValue");
@@ -110,6 +111,34 @@ function toStorageDate(date) {
   const month = String(date.getMonth() + 1).padStart(2, "0");
   const day = String(date.getDate()).padStart(2, "0");
   return `${year}-${month}-${day}`;
+}
+
+function sanitizeDepositsForDownload() {
+  return appState.deposits.map((deposit) => ({
+    id: deposit.id,
+    bankName: deposit.bankName,
+    depositName: deposit.depositName,
+    principal: Number(deposit.principal),
+    rate: Number(deposit.rate),
+    startDate: deposit.startDate,
+    tenureMonths: Number(deposit.tenureMonths),
+    maturityDate: deposit.maturityDate,
+    notes: deposit.notes || "",
+  }));
+}
+
+function downloadDeposits() {
+  const fileContents = JSON.stringify(sanitizeDepositsForDownload(), null, 2);
+  const blob = new Blob([fileContents], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+
+  link.href = url;
+  link.download = `fd-tracker-deposits-${toStorageDate(startOfToday())}.json`;
+  document.body.append(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
 }
 
 function formatCurrency(value) {
@@ -583,6 +612,10 @@ formEnableNotificationsBtn.addEventListener("click", async () => {
 
 scrollInvestmentsBtn.addEventListener("click", () => {
   document.getElementById("investmentsSection").scrollIntoView({ behavior: "smooth", block: "start" });
+});
+
+downloadDataBtn?.addEventListener("click", () => {
+  downloadDeposits();
 });
 
 themeToggleBtn.addEventListener("click", () => {
