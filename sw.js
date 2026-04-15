@@ -1,4 +1,4 @@
-const CACHE_NAME = "fd-tracker-v1";
+const CACHE_NAME = "fd-tracker-v2";
 const ASSETS = [
   "./",
   "./index.html",
@@ -7,6 +7,8 @@ const ASSETS = [
   "./manifest.webmanifest",
   "./icons/icon.svg",
 ];
+
+const NETWORK_FIRST_PATHS = ["data/deposits.json"];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
@@ -25,6 +27,22 @@ self.addEventListener("activate", (event) => {
 });
 
 self.addEventListener("fetch", (event) => {
+  const requestUrl = new URL(event.request.url);
+  const isNetworkFirst = NETWORK_FIRST_PATHS.some((path) => requestUrl.pathname.endsWith(path));
+
+  if (isNetworkFirst) {
+    event.respondWith(
+      fetch(event.request)
+        .then((response) => {
+          const clonedResponse = response.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clonedResponse));
+          return response;
+        })
+        .catch(() => caches.match(event.request))
+    );
+    return;
+  }
+
   event.respondWith(
     caches.match(event.request).then((cached) => cached || fetch(event.request))
   );

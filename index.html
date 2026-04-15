@@ -65,7 +65,7 @@
       <section class="action-row">
         <a class="primary-cta" href="#addDepositSection">Add New Fixed Deposit</a>
         <button class="secondary-cta" type="button" id="scrollInvestmentsBtn">View Investments</button>
-        <p id="storageStatus" class="notification-copy">Storage mode: browser-only storage</p>
+        <p id="storageStatus" class="notification-copy">Storage mode: bundled JSON file in data/deposits.json.</p>
         <p id="notificationStatus" class="notification-copy">Popup reminders are disabled. Click the bell to enable 7-day maturity alerts.</p>
       </section>
 
@@ -106,10 +106,14 @@
           <section id="addDepositSection" class="content-section tone-card-soft">
             <div class="section-heading">
               <div>
-                <p class="section-kicker">New Entry</p>
-                <h2>Add Fixed Deposit</h2>
+                <p class="section-kicker">Repo-Managed Data</p>
+                <h2>Read-Only Deposit Form</h2>
               </div>
             </div>
+
+            <p id="readOnlyNotice" class="notification-copy" hidden>
+              Deposits are now loaded from <code>data/deposits.json</code>. Edit that file in the repo and redeploy to publish changes.
+            </p>
 
             <form id="fdForm" class="editorial-form">
               <label class="field">
@@ -202,7 +206,7 @@
                 <button class="toggle-pill" type="button" id="formEnableNotificationsBtn">Turn On</button>
               </div>
 
-              <button class="save-button" type="submit">Save Investment</button>
+              <button class="save-button" type="submit">Edit data/deposits.json to update</button>
             </form>
           </section>
         </aside>
@@ -244,12 +248,10 @@
 
   <template id="emptyStateTemplate">
     <div class="empty-state">
-      <p>No fixed deposits yet. Add your first placement to unlock maturity forecasts, expected returns, and reminder tracking.</p>
+      <p>No fixed deposits yet. Update data/deposits.json to publish your first placement and unlock maturity forecasts, expected returns, and reminder tracking.</p>
     </div>
   </template>
 
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
-  <script src="supabase-config.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

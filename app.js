@@ -1,5 +1,6 @@
-const STORAGE_KEY = "fd-tracker.deposits";
 const NOTIFIED_KEY = "fd-tracker.notified-reminders";
+const DATA_FILE_PATH = "data/deposits.json";
+const THEME_KEY = "fd-tracker.theme";
 
 const fdForm = document.getElementById("fdForm");
 const bankNameInput = document.getElementById("bankName");
@@ -31,20 +32,14 @@ const calculatedInterest = document.getElementById("calculatedInterest");
 const calculatedMaturityValue = document.getElementById("calculatedMaturityValue");
 const riskProfileTitle = document.getElementById("riskProfileTitle");
 const riskProfileCopy = document.getElementById("riskProfileCopy");
-const THEME_KEY = "fd-tracker.theme";
+const readOnlyNotice = document.getElementById("readOnlyNotice");
+const saveButton = fdForm?.querySelector('button[type="submit"]');
+
 const appState = {
   deposits: [],
-  storageMode: "local",
+  storageMode: "json",
+  storageIssue: "",
 };
-const appConfig = window.FDTrackerConfig || { supabaseUrl: "", supabaseAnonKey: "" };
-const supabaseClient = (hasSupabaseConfig => {
-  if (!hasSupabaseConfig) return null;
-  try {
-    return window.supabase.createClient(appConfig.supabaseUrl, appConfig.supabaseAnonKey);
-  } catch {
-    return null;
-  }
-})(Boolean(window.FDTrackerConfig?.supabaseUrl && window.FDTrackerConfig?.supabaseAnonKey));
 
 const currencyFormatter = new Intl.NumberFormat(undefined, {
   style: "currency",
@@ -57,48 +52,8 @@ const percentFormatter = new Intl.NumberFormat(undefined, {
   maximumFractionDigits: 2,
 });
 
-function toDbRow(deposit) {
-  return {
-    id: deposit.id,
-    bank_name: deposit.bankName,
-    deposit_name: deposit.depositName,
-    principal: deposit.principal,
-    rate: deposit.rate,
-    start_date: deposit.startDate,
-    tenure_months: deposit.tenureMonths,
-    maturity_date: deposit.maturityDate,
-    notes: deposit.notes || "",
-  };
-}
-
-function fromDbRow(row) {
-  return {
-    id: row.id,
-    bankName: row.bank_name,
-    depositName: row.deposit_name,
-    principal: row.principal,
-    rate: row.rate,
-    startDate: row.start_date,
-    tenureMonths: row.tenure_months,
-    maturityDate: row.maturity_date,
-    notes: row.notes || "",
-  };
-}
-
 function pluralize(value, singular, plural = `${singular}s`) {
   return `${value} ${Math.abs(value) === 1 ? singular : plural}`;
-}
-
-function loadDeposits() {
-  try {
-    return JSON.parse(localStorage.getItem(STORAGE_KEY)) ?? [];
-  } catch {
-    return [];
-  }
-}
-
-function saveDeposits(deposits) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(deposits));
 }
 
 function loadNotifiedReminders() {
@@ -215,24 +170,55 @@ function getEnrichedDeposits() {
     .sort((a, b) => toDate(a.maturityDate) - toDate(b.maturityDate));
 }
 
-function hasSupabaseConfig() {
-  return Boolean(appConfig.supabaseUrl && appConfig.supabaseAnonKey);
+function isValidDepositRecord(record) {
+  if (!record || typeof record !== "object") {
+    return false;
+  }
+
+  const requiredStringFields = ["id", "bankName", "depositName", "startDate", "maturityDate"];
+  return requiredStringFields.every((field) => typeof record[field] === "string")
+    && Number.isFinite(Number(record.principal))
+    && Number.isFinite(Number(record.rate))
+    && Number.isFinite(Number(record.tenureMonths));
 }
 
 async function hydrateDeposits() {
-  if (supabaseClient) {
-    const { data, error } = await supabaseClient
-      .from("deposits")
-      .select("*")
-      .order("created_at", { ascending: true });
-    if (!error && data) {
-      appState.deposits = data.map(fromDbRow);
-      appState.storageMode = "supabase";
-      return;
+  appState.storageMode = "json";
+  appState.storageIssue = "";
+
+  try {
+    const response = await fetch(DATA_FILE_PATH, { cache: "no-store" });
+    if (!response.ok) {
+      throw new Error(`Unable to load ${DATA_FILE_PATH} (${response.status}).`);
     }
+
+    const data = await response.json();
+    if (!Array.isArray(data)) {
+      throw new Error("Deposit data must be an array.");
+    }
+
+    const invalidRecord = data.find((record) => !isValidDepositRecord(record));
+    if (invalidRecord) {
+      throw new Error("Deposit data contains an invalid record.");
+    }
+
+    appState.deposits = data.map((deposit) => ({
+      id: deposit.id,
+      bankName: deposit.bankName,
+      depositName: deposit.depositName,
+      principal: Number(deposit.principal),
+      rate: Number(deposit.rate),
+      startDate: deposit.startDate,
+      tenureMonths: Number(deposit.tenureMonths),
+      maturityDate: deposit.maturityDate,
+      notes: typeof deposit.notes === "string" ? deposit.notes : "",
+    }));
+    return;
+  } catch (error) {
+    appState.storageIssue = error.message || "Unable to load the bundled deposit data.";
   }
-  appState.storageMode = "local";
-  appState.deposits = loadDeposits();
+
+  appState.deposits = [];
 }
 
 function calculateFormPreview() {
@@ -263,19 +249,19 @@ function calculateFormPreview() {
 }
 
 function updateStorageStatus() {
-  if (appState.storageMode === "supabase") {
-    storageStatus.textContent = "Storage mode: Supabase (cloud sync active)";
+  if (appState.storageIssue) {
+    storageStatus.textContent = `Storage mode: bundled JSON file. ${appState.storageIssue}`;
     return;
   }
 
-  storageStatus.textContent = "Storage mode: browser-only storage";
+  storageStatus.textContent = "Storage mode: bundled JSON file in data/deposits.json. Update the repo file and redeploy to change entries.";
 }
 
 function renderRiskProfile(deposits) {
   if (!deposits.length) {
     riskProfileTitle.textContent = "Conservative Fixed-Income View";
     riskProfileCopy.textContent =
-      "Add deposits to see a live portfolio readout based on maturity mix, liquidity timing, and bank concentration.";
+      "Add entries to data/deposits.json to see a live portfolio readout based on maturity mix, liquidity timing, and bank concentration.";
     return;
   }
 
@@ -408,7 +394,7 @@ function renderReminders(deposits) {
 
   if (!dueSoon.length) {
     reminderList.innerHTML = emptyStateTemplate.innerHTML.replace(
-      "No fixed deposits yet. Add your first placement to unlock maturity forecasts, expected returns, and reminder tracking.",
+      "No fixed deposits yet. Update data/deposits.json to publish your first placement and unlock maturity forecasts, expected returns, and reminder tracking.",
       "No deposits mature within the next 7 days. Your next reminder will appear here automatically."
     );
     return;
@@ -429,7 +415,7 @@ function renderReminders(deposits) {
             <div class="reminder-icon">${deposit.bankName.trim().slice(0, 2).toUpperCase()}</div>
             <div>
               <strong>${deposit.depositName}</strong>
-              <div class="reminder-meta">${deposit.bankName} • ${formatDate(deposit.maturityDate)}</div>
+              <div class="reminder-meta">${deposit.bankName} | ${formatDate(deposit.maturityDate)}</div>
               <div class="timeline-subtext">Projected value ${formatCurrency(deposit.projectedValue)}</div>
             </div>
           </div>
@@ -477,13 +463,25 @@ function renderTable(deposits) {
             <div class="investment-value">${formatDate(deposit.maturityDate)}</div>
             <p class="investment-notes">${deposit.daysUntilMaturity < 0 ? `${pluralize(Math.abs(deposit.daysUntilMaturity), "day")} overdue` : deposit.daysUntilMaturity === 0 ? "Matures today" : `${pluralize(deposit.daysUntilMaturity, "day")} left`}</p>
           </div>
-          <div class="investment-actions">
-            <button class="ghost-button" type="button" data-delete-id="${deposit.id}">Delete</button>
-          </div>
         </article>
       `
     )
     .join("");
+}
+
+function disableManualEditing() {
+  [bankNameInput, depositNameInput, principalInput, rateInput, startDateInput, tenureMonthsInput, notesInput].forEach((element) => {
+    element.disabled = true;
+  });
+
+  if (saveButton) {
+    saveButton.disabled = true;
+    saveButton.textContent = "Edit data/deposits.json to update";
+  }
+
+  if (readOnlyNotice) {
+    readOnlyNotice.hidden = false;
+  }
 }
 
 async function notifyDueDeposits(deposits) {
@@ -564,69 +562,7 @@ function renderDashboard() {
 
 fdForm.addEventListener("submit", async (event) => {
   event.preventDefault();
-
-  const startDateValue = startDateInput.value;
-  const tenureMonthsValue = Number(tenureMonthsInput.value || 0);
-  const computedMaturityDate = startDateValue && tenureMonthsValue
-    ? toStorageDate(addMonths(toDate(startDateValue), tenureMonthsValue))
-    : "";
-
-  const newDeposit = {
-    id: crypto.randomUUID(),
-    bankName: bankNameInput.value.toString().trim(),
-    depositName: depositNameInput.value.toString().trim(),
-    principal: Number(principalInput.value),
-    rate: Number(rateInput.value),
-    startDate: startDateValue,
-    tenureMonths: tenureMonthsValue,
-    maturityDate: computedMaturityDate,
-    notes: notesInput.value.toString().trim(),
-  };
-
-  if (!newDeposit.startDate || !newDeposit.tenureMonths) {
-    window.alert("Please select a start date and tenure.");
-    return;
-  }
-
-  try {
-    if (supabaseClient) {
-      const { error } = await supabaseClient.from("deposits").insert(toDbRow(newDeposit));
-      if (error) throw new Error(error.message);
-    } else {
-      saveDeposits([...appState.deposits, newDeposit]);
-    }
-    appState.deposits = [...appState.deposits, newDeposit];
-    fdForm.reset();
-    calculateFormPreview();
-    renderDashboard();
-  } catch (error) {
-    window.alert(error.message || "Unable to save the deposit right now.");
-  }
-});
-
-depositTableBody.addEventListener("click", async (event) => {
-  const target = event.target;
-  if (!(target instanceof HTMLElement)) {
-    return;
-  }
-
-  const deleteId = target.dataset.deleteId;
-  if (!deleteId) {
-    return;
-  }
-
-  try {
-    if (supabaseClient) {
-      const { error } = await supabaseClient.from("deposits").delete().eq("id", deleteId);
-      if (error) throw new Error(error.message);
-    } else {
-      saveDeposits(appState.deposits.filter((deposit) => deposit.id !== deleteId));
-    }
-    appState.deposits = appState.deposits.filter((deposit) => deposit.id !== deleteId);
-    renderDashboard();
-  } catch (error) {
-    window.alert(error.message || "Unable to delete the deposit right now.");
-  }
+  window.alert("This deployment is read-only. Update data/deposits.json in the repo and redeploy to change deposits.");
 });
 
 enableNotificationsBtn.addEventListener("click", async () => {
@@ -668,6 +604,7 @@ if ("serviceWorker" in navigator) {
 
 async function initializeApp() {
   applyTheme(loadTheme());
+  disableManualEditing();
   await hydrateDeposits();
   renderDashboard();
   calculateFormPreview();
